@@ -59,26 +59,38 @@ def casos_dengue(elemento):
         else:
             yield (f"{uf}-{registro['ano_mes']}", 0.0)
 
-
-dengue = (
-    pipeline
-    | 'Leitura do dataset de dengue' >> ReadFromText('D:\\Projetos\\Python\\Data_Engineering\\beam_pipeline\\data\\casos_dengue.txt', skip_header_lines=1)
-    | 'De texto para lista' >> beam.Map(texto_para_lista)
-    | 'De lista para dicionario' >> beam.Map(lista_para_dicionario, colunas_dengue)
-    | 'Adiciona campo ano_mes' >> beam.Map(tratamento_data)
-    | 'Cria chave pelo estado' >> beam.Map(chave_uf)
-    | 'Agrupar pelo estado' >> beam.GroupByKey()
-    | 'Descompactar casos de dengue' >> beam.FlatMap(casos_dengue)
-    | 'Soma dos casos pela chave' >> beam.CombinePerKey(sum)
-    # | 'Mostrar resultados' >> beam.Map(print)
+def chave_uf_ano_mes_de_lista(elemento):
+    """
+    Receber uma lista de elementos
+    Retornar uma tupla contendo chave e o valor de chuva em mm
+    ('UF-ANO-MES', 1.3)
+    """
+    data, mm, uf = elemento
+    ano_mes = '-'.join(data.split('-')[:2])
+    chave = f'{uf}-{ano_mes}'
+    return chave, float(mm)
     
-)
+
+
+# dengue = (
+#     pipeline
+#     | 'Leitura do dataset de dengue' >> ReadFromText('D:\\Projetos\\Python\\Data_Engineering\\beam_pipeline\\data\\casos_dengue.txt', skip_header_lines=1)
+#     | 'De texto para lista' >> beam.Map(texto_para_lista)
+#     | 'De lista para dicionario' >> beam.Map(lista_para_dicionario, colunas_dengue)
+#     | 'Adiciona campo ano_mes' >> beam.Map(tratamento_data)
+#     | 'Cria chave pelo estado' >> beam.Map(chave_uf)
+#     | 'Agrupar pelo estado' >> beam.GroupByKey()
+#     | 'Descompactar casos de dengue' >> beam.FlatMap(casos_dengue)
+#     | 'Soma dos casos pela chave' >> beam.CombinePerKey(sum)
+#     # | 'Mostrar resultados' >> beam.Map(print)
+    
+# )
 
 chuvas = (
     pipeline
     | 'Leitura do dataset de chuvas' >> ReadFromText('D:\\Projetos\\Python\\Data_Engineering\\beam_pipeline\\data\\chuvas.csv', skip_header_lines=1)
     | 'De csv para lista' >> beam.Map(texto_para_lista, delimitador=',')
-    | 'De lista para dicionario' >> beam.Map(lista_para_dicionario, colunas_dengue)
+    | 'Criando chave UF-ANO_MES-MM' >> beam.Map(chave_uf_ano_mes_de_lista)
     | 'Mostrar resultados' >> beam.Map(print)
     
 )
