@@ -68,31 +68,68 @@ def chave_uf_ano_mes_de_lista(elemento):
     data, mm, uf = elemento
     ano_mes = '-'.join(data.split('-')[:2])
     chave = f'{uf}-{ano_mes}'
+    if float(mm) < 0:
+        mm = 0.0
+    else:
+        mm = float(mm)
     return chave, float(mm)
-    
+
+def arredonda(elemento):
+    """
+    Recebe uma tupla e retorna a mesma com o valor arredondado
+    """
+    chave, mm = elemento
+    return (chave, round(mm, 1))
+
+def filtra_campos_vazios(elemento):
+    """
+    Remove elementos que tenham chaves vazias
+    """
+    chave, dados = elemento
+    if all([
+            dados['chuvas'],
+            dados['dengue']
+        ]):
+        return True
+    return False
 
 
-# dengue = (
-#     pipeline
-#     | 'Leitura do dataset de dengue' >> ReadFromText('D:\\Projetos\\Python\\Data_Engineering\\beam_pipeline\\data\\casos_dengue.txt', skip_header_lines=1)
-#     | 'De texto para lista' >> beam.Map(texto_para_lista)
-#     | 'De lista para dicionario' >> beam.Map(lista_para_dicionario, colunas_dengue)
-#     | 'Adiciona campo ano_mes' >> beam.Map(tratamento_data)
-#     | 'Cria chave pelo estado' >> beam.Map(chave_uf)
-#     | 'Agrupar pelo estado' >> beam.GroupByKey()
-#     | 'Descompactar casos de dengue' >> beam.FlatMap(casos_dengue)
-#     | 'Soma dos casos pela chave' >> beam.CombinePerKey(sum)
-#     # | 'Mostrar resultados' >> beam.Map(print)
+dengue = (
+    pipeline
+    #| 'Leitura do dataset de dengue' >> ReadFromText('D:\\Projetos\\Python\\Data_Engineering\\beam_pipeline\\data\\casos_dengue.txt', skip_header_lines=1)
+    | 'Leitura do dataset de dengue' >> ReadFromText('D:\\Projetos\\Python\\Data_Engineering\\beam_pipeline\\data\\sample_casos_dengue.txt', skip_header_lines=1)
+    | 'De texto para lista' >> beam.Map(texto_para_lista)
+    | 'De lista para dicionario' >> beam.Map(lista_para_dicionario, colunas_dengue)
+    | 'Adiciona campo ano_mes' >> beam.Map(tratamento_data)
+    | 'Cria chave pelo estado' >> beam.Map(chave_uf)
+    | 'Agrupar pelo estado' >> beam.GroupByKey()
+    | 'Descompactar casos de dengue' >> beam.FlatMap(casos_dengue)
+    | 'Soma dos casos pela chave' >> beam.CombinePerKey(sum)
+    # | 'Mostrar resultados' >> beam.Map(print)
     
-# )
+)
+
 
 chuvas = (
     pipeline
-    | 'Leitura do dataset de chuvas' >> ReadFromText('D:\\Projetos\\Python\\Data_Engineering\\beam_pipeline\\data\\chuvas.csv', skip_header_lines=1)
+    # | 'Leitura do dataset de chuvas' >> ReadFromText('D:\\Projetos\\Python\\Data_Engineering\\beam_pipeline\\data\\chuvas.csv', skip_header_lines=1)
+    | 'Leitura do dataset de chuvas' >> ReadFromText('D:\\Projetos\\Python\\Data_Engineering\\beam_pipeline\\data\\sample_chuvas.csv', skip_header_lines=1)
     | 'De csv para lista' >> beam.Map(texto_para_lista, delimitador=',')
     | 'Criando chave UF-ANO_MES-MM' >> beam.Map(chave_uf_ano_mes_de_lista)
-    | 'Mostrar resultados' >> beam.Map(print)
+    | 'Agrupando por chave' >> beam.CombinePerKey(sum)
+    | 'Arredondar resultados de chuvas' >> beam.Map(arredonda)
+    # | 'Mostrar resultados chuvas' >> beam.Map(print)
     
+)
+
+resultado = (
+    # (chuvas, dengue)
+    # | 'Empilha Pcollections' >> beam.Flatten()
+    # | 'Agrupar valores pela chave' >> beam.GroupByKey()
+    ({'chuvas': chuvas, 'dengue': dengue})
+    | 'Merge de pcolls' >> beam.CoGroupByKey()
+    | 'Filtrar dados nulos' >> beam.Filter(filtra_campos_vazios)
+    | 'Mostrar resultados junção' >> beam.Map(print)
 )
 
 
