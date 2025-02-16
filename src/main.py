@@ -1,7 +1,7 @@
 import re
 import apache_beam as beam
 from apache_beam.options.pipeline_options import PipelineOptions
-from apache_beam.io import ReadFromText
+from apache_beam.io import ReadFromText, WriteToText
 
 
 pipeline_options = PipelineOptions(argc=None)
@@ -94,10 +94,31 @@ def filtra_campos_vazios(elemento):
     return False
 
 
+def descompactar_elementos(elemento):
+    """
+    Recebe tupla ('CE-2015-12', {'chuvas': [7.6], 'dengue': [29.0]})
+    Retorna ('CE','2015', '12', '7.6' ,'29.0')
+    """
+    chave, dados  = elemento
+    chuva = dados['chuvas'][0]
+    dengue = dados['dengue'][0]
+    uf, ano, mes = chave.split('-')
+    return uf, ano, mes, str(chuva), str(dengue)
+
+def preparar_csv(elemento, delimitador=';'):
+    """
+    Recebe tupla ('CE',2015, 12, 7.6 ,29.0)
+    Retorna string delimitada por vírgula ('CE;2015; 12; 7.6 ;29.0')
+    """
+    return f'{delimitador}'.join(elemento)
+    
+    
+
+
 dengue = (
     pipeline
-    #| 'Leitura do dataset de dengue' >> ReadFromText('D:\\Projetos\\Python\\Data_Engineering\\beam_pipeline\\data\\casos_dengue.txt', skip_header_lines=1)
-    | 'Leitura do dataset de dengue' >> ReadFromText('D:\\Projetos\\Python\\Data_Engineering\\beam_pipeline\\data\\sample_casos_dengue.txt', skip_header_lines=1)
+    | 'Leitura do dataset de dengue' >> ReadFromText('D:\\Projetos\\Python\\Data_Engineering\\beam_pipeline\\data\\casos_dengue.txt', skip_header_lines=1)
+    # | 'Leitura do dataset de dengue' >> ReadFromText('D:\\Projetos\\Python\\Data_Engineering\\beam_pipeline\\data\\sample_casos_dengue.txt', skip_header_lines=1)
     | 'De texto para lista' >> beam.Map(texto_para_lista)
     | 'De lista para dicionario' >> beam.Map(lista_para_dicionario, colunas_dengue)
     | 'Adiciona campo ano_mes' >> beam.Map(tratamento_data)
@@ -112,8 +133,8 @@ dengue = (
 
 chuvas = (
     pipeline
-    # | 'Leitura do dataset de chuvas' >> ReadFromText('D:\\Projetos\\Python\\Data_Engineering\\beam_pipeline\\data\\chuvas.csv', skip_header_lines=1)
-    | 'Leitura do dataset de chuvas' >> ReadFromText('D:\\Projetos\\Python\\Data_Engineering\\beam_pipeline\\data\\sample_chuvas.csv', skip_header_lines=1)
+    | 'Leitura do dataset de chuvas' >> ReadFromText('D:\\Projetos\\Python\\Data_Engineering\\beam_pipeline\\data\\chuvas.csv', skip_header_lines=1)
+    # | 'Leitura do dataset de chuvas' >> ReadFromText('D:\\Projetos\\Python\\Data_Engineering\\beam_pipeline\\data\\sample_chuvas.csv', skip_header_lines=1)
     | 'De csv para lista' >> beam.Map(texto_para_lista, delimitador=',')
     | 'Criando chave UF-ANO_MES-MM' >> beam.Map(chave_uf_ano_mes_de_lista)
     | 'Agrupando por chave' >> beam.CombinePerKey(sum)
@@ -129,9 +150,15 @@ resultado = (
     ({'chuvas': chuvas, 'dengue': dengue})
     | 'Merge de pcolls' >> beam.CoGroupByKey()
     | 'Filtrar dados nulos' >> beam.Filter(filtra_campos_vazios)
-    | 'Mostrar resultados junção' >> beam.Map(print)
+    | 'Descompactar elementos' >> beam.Map(descompactar_elementos)
+    | 'Preparar para csv' >> beam.Map(preparar_csv)
+    # | 'Mostrar resultados junção' >> beam.Map(print)
 )
 
+header = 'UF;ANO;MES;CHUVA;DENGUE'
+
+resultado | 'Criar arquivo csv' >>  WriteToText('D:\\Projetos\\Python\\Data_Engineering\\beam_pipeline\\data\\casos_dengue_chuva'\
+    , file_name_suffix='csv', header=header)
 
 
 pipeline.run()
